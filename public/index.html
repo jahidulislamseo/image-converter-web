@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Ultimate Image Converter (Web)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+    .card { max-width: 720px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
+    label { font-weight: 600; }
+    input[type="number"], select { padding: 8px; }
+    .drop { border: 2px dashed #bbb; border-radius: 12px; padding: 20px; text-align: center; margin-top: 8px; }
+    button { padding: 10px 14px; border: 0; border-radius: 8px; background: #4CAF50; color: #fff; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .note { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Ultimate Image Converter (Web)</h1>
+    <p>Convert images to PNG / JPEG / WEBP / GIF / BMP / TIFF. Resize by percent or exact size.</p>
+
+    <form id="form">
+      <label>Choose image</label>
+      <div id="drop" class="drop">
+        <input id="file" name="file" type="file" accept="image/*" />
+        <div class="note">You can also drag & drop a file here</div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="format">Output format</label><br/>
+          <select id="format" name="format">
+            <option>PNG</option><option>JPEG</option><option>WEBP</option>
+            <option>GIF</option><option>BMP</option><option>TIFF</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="quality">Quality (1–100)</label><br/>
+          <input id="quality" name="quality" type="number" min="1" max="100" value="85" />
+          <div class="note">Used by JPEG/WEBP. PNG uses compression.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="mode">Resize Mode</label><br/>
+          <select id="mode" name="mode">
+            <option value="none">None</option>
+            <option value="percent">Percent</option>
+            <option value="exact">Exact size</option>
+          </select>
+        </div>
+
+        <div id="percentBox" style="display:none">
+          <label for="percent">Percent</label><br/>
+          <input id="percent" name="percent" type="number" min="1" max="1000" value="100" />
+        </div>
+
+        <div id="exactBox" style="display:none">
+          <label>W × H</label><br/>
+          <input id="width" name="width" type="number" min="1" placeholder="Width" />
+          <input id="height" name="height" type="number" min="1" placeholder="Height" />
+        </div>
+      </div>
+
+      <button id="convertBtn" type="submit">Convert</button>
+      <span id="status" class="note" style="margin-left:8px;"></span>
+    </form>
+  </div>
+
+  <script>
+    const mode = document.getElementById('mode');
+    const percentBox = document.getElementById('percentBox');
+    const exactBox = document.getElementById('exactBox');
+    const fileInput = document.getElementById('file');
+    const drop = document.getElementById('drop');
+    const form = document.getElementById('form');
+    const btn = document.getElementById('convertBtn');
+    const statusEl = document.getElementById('status');
+
+    function updateModeUI() {
+      percentBox.style.display = mode.value === 'percent' ? 'block' : 'none';
+      exactBox.style.display = mode.value === 'exact' ? 'block' : 'none';
+    }
+    mode.addEventListener('change', updateModeUI);
+    updateModeUI();
+
+    // drag&drop
+    ;['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation(); drop.style.borderColor = '#4CAF50';
+    }));
+    ;['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation(); drop.style.borderColor = '#bbb';
+    }));
+    drop.addEventListener('drop', e => {
+      const f = e.dataTransfer.files?.[0];
+      if (f) fileInput.files = e.dataTransfer.files;
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!fileInput.files.length) { alert('Please choose a file'); return; }
+
+      const fd = new FormData(form);
+      btn.disabled = true; statusEl.textContent = 'Converting...';
+
+      try {
+        const res = await fetch('/api/convert', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error((await res.json()).error || 'Conversion failed');
+
+        // get filename from headers or fallback
+        const disp = res.headers.get('Content-Disposition') || '';
+        const match = /filename=([^;]+)/i.exec(disp);
+        const fname = match ? match[1].replace(/"/g,'') : ('converted.' + (fd.get('format') || 'PNG').toLowerCase());
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = fname; a.click();
+        URL.revokeObjectURL(url);
+        statusEl.textContent = 'Done';
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Error: ' + err.message;
+        alert('Error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
